@@ -160,6 +160,10 @@
         (pl-http/error-response "checksums don't match")
         (app req)))))
 
+(def ^{:private true}
+  metrics-uri 
+  #"^(/[^/]*)?/metrics/mbean.*")
+
 (defn wrap-with-metrics*
   "Ring middleware that will tack performance counters for each
   URL. Arguments are the same as for `wrap-with-metrics`, except:
@@ -172,26 +176,30 @@
                          (if (string? s) [s] s))
           metric-roots (map #(s/replace % #"[:,=]" "_") metric-roots)]
 
-      ;; Create timer objects for each metric the user has requested
-      (doseq [metric-root metric-roots
-              :let [timer-key [:timers metric-root]]
-              :when (not (get-in @storage timer-key))]
-        (swap! storage assoc-in timer-key (timer [prefix metric-root "service-time"])))
+      ;; If URI is a metric lookup, pass through   
+      (if (some #(re-find metrics-uri %) metric-roots)
+        (app req)
+        (do 
+          ;; Create timer objects for each metric the user has requested
+          (doseq [metric-root metric-roots
+                  :let [timer-key [:timers metric-root]]
+                  :when (not (get-in @storage timer-key))]
+            (swap! storage assoc-in timer-key (timer [prefix metric-root "service-time"])))
 
-      (let [timers (map #(get-in @storage [:timers %]) metric-roots)]
-        (multitime! timers
-           (let [response  (app req)
-                 status    (:status response)]
+          (let [timers (map #(get-in @storage [:timers %]) metric-roots)]
+            (multitime! timers
+                        (let [response  (app req)
+                              status    (:status response)]
 
-             ;; Create meter objects for each metric the user has
-             ;; requested
-             (doseq [metric-root metric-roots
-                     :let [meter-key [:meters metric-root status]]
-                     :when (not (get-in @storage meter-key))]
-               (swap! storage assoc-in meter-key (meter [prefix metric-root (str status)] "reqs/s"))
-               (mark! (get-in @storage meter-key)))
+                          ;; Create meter objects for each metric the user has
+                          ;; requested
+                          (doseq [metric-root metric-roots
+                                  :let [meter-key [:meters metric-root status]]
+                                  :when (not (get-in @storage meter-key))]
+                            (swap! storage assoc-in meter-key (meter [prefix metric-root (str status)] "reqs/s"))
+                            (mark! (get-in @storage meter-key)))
 
-             response))))))
+                          response))))))))
 
 (defmacro wrap-with-metrics
   "Ring middleware that will tack performance counters for each URL.

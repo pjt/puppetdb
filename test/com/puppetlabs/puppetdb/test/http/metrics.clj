@@ -105,7 +105,7 @@
           (is (map? v2-mbeans))
           (is (map? v3-mbeans))
 
-          (doseq [[name uri] (take 100 api-mbeans)
+          (doseq [[name uri] api-mbeans
                   :let [response ((mbean [name]) (fixt/internal-request))]]
 
             (is (= (:status response pl-http/status-ok)))

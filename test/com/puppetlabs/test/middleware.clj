@@ -16,12 +16,15 @@
         (let [handler (fn [req] (-> (rr/response nil)
                                     (rr/status status)))
               app (wrap-with-metrics handler storage normalize-uri)]
-          (app {:uri "/foo/bar/baz"})))
+          (app {:uri "/foo/bar/baz"})
+          ;; add metrics URL, which should be ignored
+          (app {:uri "/v2/metrics/mbean/somemetric"})))
 
       ;; Should create both timers and meters
       (is (= #{:timers :meters} (keyset @storage)))
 
       ;; Should have timers and meters for the given URL
+      ;;  (but not the metrics URL)
       (is (= #{"/foo/bar/baz"} (keyset (@storage :timers))))
       (is (= #{"/foo/bar/baz"} (keyset (@storage :meters))))
 
